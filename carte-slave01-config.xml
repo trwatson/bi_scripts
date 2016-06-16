@@ -1,0 +1,11 @@
+<slave_config>
+<!-- the slaveserver node contains information about this Carte slave instance -->
+        <slaveserver>
+                <name>prod_slave</name>
+                <hostname>prod_pentaho01</hostname>
+                <port>6071</port>
+                <username>cluster</username>
+                <password>password</password>
+                <master>N</master>
+        </slaveserver>
+</slave_config>
