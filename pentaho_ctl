@@ -1,0 +1,97 @@
+#!/bin/bash
+. /etc/init.d/functions
+. $(dirname $0)/setenv.sh
+
+if [[ "$CURRENT_USER" != "pentaho" ]]; then
+        echo "Running this as any user other than pentaho will cause serious harm. Please su - pentaho" 2>&1
+        exit 1
+fi
+function checkCarte {
+        CARTE_PROCS=`pgrep -f -l "$CARTE_THUMB" | wc -l`
+        if [ "$CARTE_PROCS" -eq "$NUM_CARTE" ]
+        then
+                return 0
+        else
+                return 1
+        fi
+}
+function checkDI {
+        DI_PROCS=`pgrep -f -l "$DI_SERV_THUMB" | wc -l`
+        if [ "$DI_PROCS" -eq "$NUM_DI" ]
+        then
+                return 0
+        else
+                return 1
+        fi
+}
+function checkBI {
+        BI_PROCS=`pgrep -f -l "$BA_SERV_THUMB" | wc -l`
+        if [ "$BI_PROCS" -eq "$NUM_BI" ]
+        then
+                return 0
+        else
+                return 1
+        fi
+}
+function checkPGSQL {
+        PGSQL_PROCS=`pgrep -f -l "$PGSQL_THUMB" | wc -l`
+        PGSQL_RESPONDING=`nc -z -w5 "$PGSQL_HOST" 5432 | grep succeeded | wc -l`
+        if [ "$PGSQL_PROCS" -eq "$NUM_PGSQL" ] && [ "$PGSQL_RESPONDING" -eq 1 ]
+        then
+                return 0
+        else
+                return 1
+        fi
+}
+
+function statusPentaho {
+        action "Pentaho Data Integration Server" checkDI
+        action "Pentaho Business Intelligence Server" checkBI
+        action "Carte Slave Processes" checkCarte
+        action "Postgresql Database Server" checkPGSQL
+}
+function stopPentaho {
+        action "Stopping Pentaho Services" $CTL_SCRIPT stop
+        action "Stopping Carte Slaves" $SLAVE_STOP
+}
+function startPentaho {
+        action "Starting Pentaho Services" $CTL_SCRIPT start
+        action "Starting Carte Slaves" $SLAVE_START
+}
+killByThumbprint () {
+        THUMB_PROCS=`pgrep -f -l "${1}" | wc -l`
+        if [ "$THUMB_PROCS" -gt "0" ]
+        then
+                echo "Killing $1"
+                if [ "$1" = "postgresql" ]
+                then
+                        $PGSQL_STOP
+                else
+                        pkill -9 -f "${1}"
+                fi
+        fi
+}
+function doubleTap {
+        for thumbprint in {$DI_SERV_THUMB,$BA_SERV_THUMB,$CARTE_THUMB,$PGSQL_THUMB}; do
+        killByThumbprint $thumbprint
+        done
+}
+case "$1" in
+  start)
+        startPentaho
+        ;;
+  stop)
+        stopPentaho
+        ;;
+  reload|restart)
+        stopPentaho
+        doubleTap
+        startPentaho
+        ;;
+  status)
+        statusPentaho
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|restart|reload|status}"
+        exit 1
+esac
